@@ -23,3 +23,12 @@ go.work.sum
 
 # env file
 .env
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
