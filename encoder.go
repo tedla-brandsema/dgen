@@ -1,4 +1,4 @@
-package main
+package dgen
 
 import (
 	"crypto/sha256"

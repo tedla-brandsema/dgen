@@ -1,4 +1,4 @@
-package main
+package dgen
 
 import (
 	"strings"
@@ -9,7 +9,8 @@ import (
 type testCase struct {
 	name          string
 	input         []byte
-	config        *Config
+	limit         int
+	charSet       *CharSet
 	wantErr       bool
 	checkRequired bool // If true, output must contain at least one char from each required group.
 }
@@ -32,12 +33,12 @@ func checkPasswordLength(t *testing.T, pass []byte, expected int) {
 }
 
 // checkDeterminism calls encodeWithComplexity twice and ensures the outputs match.
-func checkDeterminism(t *testing.T, input []byte, config *Config) []byte {
-	pass1, err1 := GeneratePassword(input, config)
+func checkDeterminism(t *testing.T, input []byte, charSet *CharSet, limit int) []byte {
+	pass1, err1 := Encode(input, charSet, limit)
 	if err1 != nil {
 		t.Fatalf("first call error: %v", err1)
 	}
-	pass2, err2 := GeneratePassword(input, config)
+	pass2, err2 := Encode(input, charSet, limit)
 	if err2 != nil {
 		t.Fatalf("second call error: %v", err2)
 	}
@@ -49,8 +50,8 @@ func checkDeterminism(t *testing.T, input []byte, config *Config) []byte {
 
 // checkRequiredGroups ensures that the generated password contains at least one character
 // from every required group.
-func checkRequiredGroups(t *testing.T, pass []byte, config *Config) {
-	for _, group := range config.Groups {
+func checkRequiredGroups(t *testing.T, pass []byte, charSet *CharSet) {
+	for _, group := range charSet.Groups {
 		if group.Required {
 			if !strings.ContainsAny(string(pass), group.Chars) {
 				t.Errorf("password %q does not contain any character from required group %q", pass, group.Name)
@@ -64,49 +65,51 @@ func TestEncodeWithComplexity(t *testing.T) {
 		{
 			name:          "Default configuration",
 			input:         []byte("test-input"),
-			config:        DefaultConfig(),
+			charSet:       DefaultCharSet(),
+			limit:         16,
 			wantErr:       false,
 			checkRequired: true,
 		},
 		{
 			name:          "Min length matching required groups",
 			input:         []byte("min-length"),
-			config:        DefaultConfig(), // Default config has 4 required groups
+			charSet:       DefaultCharSet(), // Default config has 4 required groups
+			limit:         16,
 			wantErr:       false,
 			checkRequired: true,
 		},
 		{
 			name:  "Error when no characters available",
 			input: []byte("anything"),
-			config: &Config{
-				Length: 10,
+			charSet: &CharSet{
 				Groups: []CharGroup{},
 			},
+			limit:   10,
 			wantErr: true,
 		},
 		{
 			name:  "Error when required group is empty",
 			input: []byte("test"),
-			config: &Config{
-				Length: 6,
+			charSet: &CharSet{
 				Groups: []CharGroup{
 					{"lowercase", "", true}, // Required but empty
 					{"uppercase", "ABCDEFGHIJKLMNOPQRSTUVWXYZ", true},
 				},
 			},
+			limit:   6,
 			wantErr: true,
 		},
 		{
 			name:  "Custom character groups",
 			input: []byte("custom-test"),
-			config: &Config{
-				Length: 10,
+			charSet: &CharSet{
 				Groups: []CharGroup{
 					{"vowels", "aeiou", true},
 					{"consonants", "bcdfghjklmnpqrstvwxyz", true},
 					{"numbers", "0123456789", false},
 				},
 			},
+			limit:         10,
 			wantErr:       false,
 			checkRequired: true,
 		},
@@ -114,16 +117,16 @@ func TestEncodeWithComplexity(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			pass, err := GeneratePassword(tc.input, tc.config)
+			pass, err := Encode(tc.input, tc.charSet, tc.limit)
 			context := tc.name + " initial call"
 			checkError(t, err, tc.wantErr, context)
 			if tc.wantErr {
 				return // Skip further checks if an error was expected
 			}
-			checkPasswordLength(t, pass, tc.config.Length)
-			pass = checkDeterminism(t, tc.input, tc.config)
+			checkPasswordLength(t, pass, tc.limit)
+			pass = checkDeterminism(t, tc.input, tc.charSet, tc.limit)
 			if tc.checkRequired {
-				checkRequiredGroups(t, pass, tc.config)
+				checkRequiredGroups(t, pass, tc.charSet)
 			}
 		})
 	}
